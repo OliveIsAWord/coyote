@@ -7,8 +7,15 @@ COYOTE_SRC_PATHS = \
 	src/coyote/*.c \
 	src/common/*.c \
 
+COBOLD_SRC_PATHS = \
+	src/cobold/*.c \
+	src/common/*.c \
+
 COYOTE_SRC = $(wildcard $(COYOTE_SRC_PATHS))
 COYOTE_OBJECTS = $(COYOTE_SRC:src/%.c=build/%.o)
+
+COBOLD_SRC = $(wildcard $(COBOLD_SRC_PATHS))
+COBOLD_OBJECTS = $(COBOLD_SRC:src/%.c=build/%.o)
 
 IRON_SRC = $(wildcard $(IRON_SRC_PATHS))
 IRON_OBJECTS = $(IRON_SRC:src/%.c=build/%.o)
@@ -44,6 +51,11 @@ coyote: bin/coyote
 bin/coyote: bin/libiron.a $(COYOTE_OBJECTS)
 	@$(LD) bin/libiron.a $(COYOTE_OBJECTS) -o bin/coyote -lm
 
+.PHONY: cobold
+cobold: bin/cobold
+bin/cobold: bin/libiron.a $(COBOLD_OBJECTS)
+	@$(LD) bin/libiron.a $(COBOLD_OBJECTS) -o bin/cobold -lm
+
 .PHONY: iron
 iron-test: bin/iron-test
 bin/iron-test: bin/libiron.a src/iron/driver/driver.c
@@ -64,7 +76,9 @@ clean:
 	@mkdir build/
 	@mkdir bin/
 	@mkdir -p $(dir $(COYOTE_OBJECTS))
+	@mkdir -p $(dir $(COBOLD_OBJECTS))
 	@mkdir -p $(dir $(IRON_OBJECTS))
 
 -include $(IRON_OBJECTS:.o=.d)
 -include $(COYOTE_OBJECTS:.o=.d)
+-include $(COBOLD_OBJECTS:.o=.d)
