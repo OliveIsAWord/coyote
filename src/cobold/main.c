@@ -34,8 +34,37 @@ int main(int argc, char *argv[]) {
         bail("Usage: %s <FILE>", my_name);
     }
     string filepath = str(argv[1]);
-    string src = file_read_to_string(filepath);
-    printf("source:\n```\n" str_fmt "```\n", str_arg(src));
+
+    // TL phase 1: Map source file data to source character set (no-op)
+    string src1 = file_read_to_string(filepath);
+    //printf("source:\n```\n" str_fmt "```\n", str_arg(src1));
+    // we could replace trigraphs here if we cared about supporting them
+    // they were removed in C23, so too bad!
+
+    // TL phase 2: remove "\\\n", turning physical lines into logical ones
+    string src2 = string_alloc(src1.len);
+    src2.len = 0;
+    {
+        for (size_t i = 0; i < src1.len; i++) {
+            char c = src1.raw[i];
+            if (c == '\\') {
+                if (i >= src1.len - 1) {
+                    bail("source file ends in a backslash");
+                }
+                // TODO: Windows CRLF line endings
+                if (src1.raw[i + 1] == '\n') {
+                    i += 1;
+                    continue;
+                }
+            }
+            src2.raw[src2.len++] = c;
+        }
+    }
+    if (src1.len != 0 && (src2.len == 0 || src2.raw[src2.len - 1] != '\n')) {
+        bail("non-empty source file does not end in a new line");
+    }
+    printf("source:\n```\n" str_fmt "```\n", str_arg(src2));
+
     bail("TODO: compile C code :3");
     return 0;
 }
