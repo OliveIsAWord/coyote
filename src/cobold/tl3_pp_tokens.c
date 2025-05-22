@@ -1,0 +1,214 @@
+#include "tl3_pp_tokens.h"
+#include "cobold.h"
+
+#define next(str) (assert(str.len > 0), str.len--, str.raw++, (void) 0)
+
+void debug_pptoks(Vec(PpTok) toks, string src1) {
+    for (size_t i = 0; i < toks.len; i++) {
+        PpTok tok = toks.at[i];
+        switch (tok.kind) {
+            case PpTokHeaderName:
+                eprintf("header_name");
+                break;
+            case PpTokIdentifier:
+                eprintf("ident");
+                break;
+            case PpTokPpNumber:
+                eprintf("number");
+                break;
+            case PpTokCharacterConstant:
+                eprintf("character");
+                break;
+            case PpTokStringLiteral:
+                eprintf("string");
+                break;
+            case PpTokPunctuator:
+                eprintf("punct");
+                break;
+            case PpTokNewline:
+                eprintf("nl");
+                break;
+            case PpTokWhitespace:
+                eprintf("ws");
+                break;
+        }
+        if (src1.len != 0) {
+            eprintf(" ");
+            string slice = {
+                .raw = src1.raw + tok.loc,
+                .len = tok.len
+            };
+            debug_str(slice);
+        }
+        eprintf("\n");
+    }
+}
+
+static bool is_whitespace(char c) {
+    switch (c) {
+        case ' ':
+        case '\t':
+        case '\r':
+        case '\v':
+        case '\f':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool is_digit(char c) {
+    switch (c) {
+        case '0' ... '9':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool is_nondigit(char c) {
+    switch (c) {
+        case 'a' ... 'z':
+        case 'A' ... 'Z':
+        case '_':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool is_identifier_start(char c) {
+    // TODO: unicode?
+    return is_nondigit(c);
+}
+
+static bool is_identifier_continue(char c) {
+    // TODO: unicode?
+    return is_identifier_start(c) || is_digit(c);
+}
+
+static bool starts_with_cstr(string str, const char *prefix) {
+    for (size_t i = 0; prefix[i]; i++) {
+        if (str.len == 0 || str.raw[i] != prefix[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static const char *puncts[] = {
+    "#"
+};
+
+// TL phase 3: preprocessing tokenization, including turning comments into whitespace
+Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
+    Vec(PpTok) src3 = vec_new(PpTok, 8);
+    string p = src2;
+    while (p.len) {
+        char c = p.raw[0];
+        // newline
+        if (c == '\n') {
+            next(p);
+            vec_append(&src3, (PpTok){ .kind = PpTokNewline });
+            continue;
+        }
+        // whitespace
+        if (is_whitespace(c)) {
+            do {
+                next(p);
+                c = p.raw[0];
+            } while (is_whitespace(c));
+            vec_append(&src3, (PpTok){ .kind = PpTokWhitespace });
+            continue;
+        }
+        // delimited comment
+        if (starts_with_cstr(p, "/*")) {
+            next(p);
+            next(p);
+            while (!starts_with_cstr(p, "*/")) {
+                if (!p.len) {
+                    bail("unterminated comment");
+                }
+                next(p);
+            }
+            next(p);
+            next(p);
+            vec_append(&src3, (PpTok){ .kind = PpTokWhitespace });
+            continue;
+        }
+        // line comment
+        if (starts_with_cstr(p, "//")) {
+            next(p);
+            do {
+                next(p);
+                if (p.len == 0) {
+                   // NOTE: we catch this in phase 2, so this should not occur.
+                   bail("unterminated line comment");
+                }
+            } while (p.raw[0] != '\n');
+            // NOTE: we do not consume the new line.
+            // let the next iteration produce a newline token.
+            vec_append(&src3, (PpTok){ .kind = PpTokWhitespace });
+            continue;
+        }
+        // number
+        if (c == '.' || is_digit(c)) {
+            while (true) {
+                next(p);
+                c = p.raw[0];
+                if (c == '.' || is_identifier_continue(c)) {
+                    continue;
+                }
+                if (c == '\'') {
+                    c = p.raw[1];
+                    if (!is_digit(c) && !is_nondigit(c)) {
+                        break;
+                    }
+                    next(p);
+                    continue;
+                }
+                if (c == 'e' || c == 'E' || c == 'p' || c == 'P') {
+                    c = p.raw[1];
+                    if (c != '+' && c != '-') {
+                        break;
+                    }
+                    next(p);
+                    continue;
+                }
+                break;
+            }
+            // TODO: parse suffixes
+            vec_append(&src3, (PpTok){ .kind = PpTokPpNumber });
+            break;
+        }
+        // identifier
+        if (is_identifier_start(c)) {
+            do {
+                next(p);
+            } while (is_identifier_continue(p.raw[0]));
+            vec_append(&src3, ((PpTok){ .kind = PpTokIdentifier, .loc = 0, .len = 5 }));
+            continue;
+        }
+        // punctuator
+        {
+            const char *matched_punct = NULL;
+            for (size_t i = 0; i < sizeof(puncts) / sizeof(puncts[0]); i++) {
+                const char *punct = puncts[i];
+                if (starts_with_cstr(p, punct)) {
+                    matched_punct = punct;
+                    break;
+                }
+            }
+            if (matched_punct) {
+                size_t len = strlen(matched_punct);
+                p.raw += len;
+                p.len -= len;
+                vec_append(&src3, (PpTok){ .kind = PpTokPunctuator });
+                continue;
+            }
+        }
+        debug_pptoks(src3, (string){0});
+        bail("unknown preproc tokenization error at \"" str_fmt "\"", str_arg(p));
+    }
+    return src3;
+}

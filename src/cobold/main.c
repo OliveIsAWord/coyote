@@ -1,12 +1,5 @@
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "../common/str.h"
-
-#define eprintf(...) fprintf (stderr, __VA_ARGS__)
-#define bail(...) (eprintf(__VA_ARGS__), eprintf("\n"), exit(1))
+#include "cobold.h"
+#include "tl3_pp_tokens.h"
 
 string file_read_to_string(string filepath) {
     // must be null terminated, ugh
@@ -44,6 +37,7 @@ int main(int argc, char *argv[]) {
     // TL phase 2: remove "\\\n", turning physical lines into logical ones
     string src2 = string_alloc(src1.len);
     src2.len = 0;
+    Vec(T2Offset) offsets = vec_new(T2Offset, 8);
     {
         for (size_t i = 0; i < src1.len; i++) {
             char c = src1.raw[i];
@@ -54,6 +48,8 @@ int main(int argc, char *argv[]) {
                 // TODO: Windows CRLF line endings
                 if (src1.raw[i + 1] == '\n') {
                     i += 1;
+                    T2Offset offset = { .index = src2.len, .actual = i + 1 };
+                    vec_append(&offsets, offset);
                     continue;
                 }
             }
@@ -61,9 +57,20 @@ int main(int argc, char *argv[]) {
         }
     }
     if (src1.len != 0 && (src2.len == 0 || src2.raw[src2.len - 1] != '\n')) {
-        bail("non-empty source file does not end in a new line");
+        bail("non-empty source file does not end in a new line character");
     }
-    printf("source:\n```\n" str_fmt "```\n", str_arg(src2));
+    if (true)
+    {
+        for (size_t i = 0; i < offsets.len; i++) {
+            T2Offset o = offsets.at[i];
+            eprintf("%lu -> %lu, ", o.index, o.actual);
+        }
+        eprintf("\n");
+    }
+    // printf("source:\n```\n" str_fmt "```\n", str_arg(src2));
+
+    Vec(PpTok) src3 = tl3(src2, offsets);
+    debug_pptoks(src3, src1);
 
     bail("TODO: compile C code :3");
     return 0;
