@@ -1,6 +1,2 @@
-// uwu
-    # /* meower */ i\
-f 1
-#endif
-
-int main(void) { return 69; }
+#include <positively meowing>
+main(){"awa";return 123.0+'abc';}

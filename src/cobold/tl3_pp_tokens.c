@@ -135,12 +135,6 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
         PpTokKind kind = -1;
         uint32_t tok_start = p.raw - src2.raw;
         do {
-            // newline
-            if (c == '\n') {
-                next(p);
-                kind = PpTokNewline;
-                break;
-            }
             // whitespace
             if (is_whitespace(c)) {
                 do {
@@ -178,6 +172,52 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 // NOTE: we do not consume the new line.
                 // let the next iteration produce a newline token.
                 kind = PpTokWhitespace;
+                break;
+            }
+            // newline
+            if (c == '\n') {
+                next(p);
+                kind = PpTokNewline;
+                break;
+            }
+            // character constant
+            if (c == '\'') {
+                next(p);
+                while (true) {
+                    c = p.raw[0];
+                    next(p);
+                    switch (c) {
+                        case '\n':
+                            bail("newline in character constant");
+                        case '\\':
+                            bail("todo: string escapes");
+                        default:
+                            continue;
+                        case '\'':
+                    }
+                    break;
+                }
+                kind = PpTokCharacterConstant;
+                break;
+            }
+            // string literal
+            if (c == '"') {
+                next(p);
+                while (true) {
+                    c = p.raw[0];
+                    next(p);
+                    switch (c) {
+                        case '\n':
+                            bail("newline in string literal");
+                        case '\\':
+                            bail("todo: string escapes");
+                        default:
+                            continue;
+                        case '"':
+                    }
+                    break;
+                }
+                kind = PpTokStringLiteral;
                 break;
             }
             // number
