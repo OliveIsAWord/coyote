@@ -105,6 +105,10 @@ static bool starts_with_cstr(string str, const char *prefix) {
     return true;
 }
 
+static bool string_eq_cstr(string str, const char *match) {
+    return starts_with_cstr(str, match) && str.len == strlen(match);
+}
+
 static const char *puncts[] = {
     "%:%:",
     "...", "<<=", ">>=",
@@ -126,14 +130,22 @@ uint32_t offset_by(uint32_t index, Vec(T2Offset) offsets) {
     return index - highest_offset.index + highest_offset.actual;
 }
 
+typedef enum: uint8_t {
+    HsStart,
+    HsHash,
+    HsInclude
+} HeaderState;
+
 // TL phase 3: preprocessing tokenization, including turning comments into whitespace
 Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
     Vec(PpTok) src3 = vec_new(PpTok, 8);
     string p = src2;
+    HeaderState hs = HsStart;
     while (p.len) {
         char c = p.raw[0];
-        PpTokKind kind = -1;
         uint32_t tok_start = p.raw - src2.raw;
+        PpTokKind kind = -1;
+        HeaderState hs_new = -1;
         do {
             // whitespace
             if (is_whitespace(c)) {
@@ -142,6 +154,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                     c = p.raw[0];
                 } while (is_whitespace(c));
                 kind = PpTokWhitespace;
+                hs_new = hs;
                 break;
             }
             // delimited comment
@@ -157,6 +170,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 next(p);
                 next(p);
                 kind = PpTokWhitespace;
+                hs_new = hs;
                 break;
             }
             // line comment
@@ -172,12 +186,66 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 // NOTE: we do not consume the new line.
                 // let the next iteration produce a newline token.
                 kind = PpTokWhitespace;
+                hs_new = hs;
                 break;
+            }
+            // header name
+            if (hs == HsInclude) {
+                if (c == '<') {
+                    while (true) {
+                        next(p);
+                        if (starts_with_cstr(p, "//") || starts_with_cstr(p, "/*")) {
+                            bail("cannot start comment in header name");
+                        }
+                        switch (p.raw[0]) {
+                            case '\'':
+                            case '\\':
+                            case '"':
+                            case '\n':
+                                // Technically this is only illegal in phase 3 if there's actually a
+                                // closing `>`. Otherwise, we should stop parsing it as a header name.
+                                // But surely it'll be a later parsing error, so oh well!
+                                bail("illegal character in header name");
+                            default:
+                                continue;
+                            case '>':
+                        }
+                        next(p);
+                        break;
+                    }
+                    kind = PpTokHeaderName;
+                    hs_new = HsStart;
+                    break;
+                }
+                if (c == '"') {
+                    while (true) {
+                        next(p);
+                        if (starts_with_cstr(p, "//") || starts_with_cstr(p, "/*")) {
+                            bail("cannot start comment in header name (yes, even though it's a string)");
+                        }
+                        switch (p.raw[0]) {
+                            case '\'':
+                            case '\\':
+                            case '\n':
+                                // Same caveat here as with `<header>` form.
+                                bail("illegal character in header name");
+                            default:
+                                continue;
+                            case '"':
+                        }
+                        next(p);
+                        break;
+                    }
+                    kind = PpTokHeaderName;
+                    hs_new = HsStart;
+                    break;
+                }
             }
             // newline
             if (c == '\n') {
                 next(p);
                 kind = PpTokNewline;
+                hs_new = HsStart;
                 break;
             }
             // character constant
@@ -198,6 +266,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                     break;
                 }
                 kind = PpTokCharacterConstant;
+                hs_new = HsStart;
                 break;
             }
             // string literal
@@ -218,6 +287,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                     break;
                 }
                 kind = PpTokStringLiteral;
+                hs_new = HsStart;
                 break;
             }
             // number
@@ -248,14 +318,18 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 }
                 // TODO: parse suffixes
                 kind = PpTokPpNumber;
+                hs_new = HsStart;
                 break;
             }
             // identifier
             if (is_identifier_start(c)) {
+                char *ident_start = p.raw;
                 do {
                     next(p);
                 } while (is_identifier_continue(p.raw[0]));
+                string ident = { .raw = ident_start, .len = p.raw - ident_start };
                 kind = PpTokIdentifier;
+                hs_new = hs == HsHash && string_eq_cstr(ident, "include") ? HsInclude : HsStart;
                 break;
             }
             // punctuator
@@ -273,6 +347,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                     p.raw += len;
                     p.len -= len;
                     kind = PpTokPunctuator;
+                    hs_new = strcmp(matched_punct, "#") == 0 ? HsHash : HsStart;
                     break;
                 }
             }
@@ -285,6 +360,8 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
             bail("");
         } while (false);
         assert(kind != (PpTokKind) -1);
+        assert(hs_new != (HeaderState) -1);
+        hs = hs_new;
         uint32_t tok_end = p.raw - src2.raw;
         uint16_t len = tok_end - tok_start;
 
