@@ -9,7 +9,7 @@
 #include "../common/str.h"
 #include "../common/vec.h"
 
-#define eprintf(...) fprintf (stderr, __VA_ARGS__)
+#define eprintf(...) fprintf(stderr, __VA_ARGS__)
 #define bail(...) (eprintf(__VA_ARGS__), eprintf("\n"), exit(1))
 
 typedef struct {

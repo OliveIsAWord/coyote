@@ -3,6 +3,8 @@
 #define next(str) (assert(str.len > 0), str.len--, str.raw++, (void) 0)
 
 void debug_pptoks(Vec(PpTok) toks, string src1, string src2) {
+    bool print_whitespace = false;
+    bool got_newline = true;
     for (size_t i = 0; i < toks.len; i++) {
         PpTok tok = toks.at[i];
         switch (tok.kind) {
@@ -25,12 +27,15 @@ void debug_pptoks(Vec(PpTok) toks, string src1, string src2) {
                 eprintf("punct ");
                 break;
             case PpTokNewline:
+                if (!print_whitespace && got_newline) continue;
                 eprintf("nl    ");
                 break;
             case PpTokWhitespace:
+                if (!print_whitespace) continue;
                 eprintf("ws    ");
                 break;
         }
+        got_newline = tok.kind == PpTokNewline;
         //eprintf(" %d, %d", tok.loc, tok.len);
         if (src2.len != 0) {
             eprintf(" ");
@@ -86,6 +91,19 @@ static bool is_nondigit(char c) {
     }
 }
 
+static uint8_t hex_digit(char c) {
+    switch (c) {
+        case '0' ... '9':
+            return c - '0';
+        case 'a' ... 'f':
+            return c - 'a' + 10;
+        case 'A' ... 'F':
+            return c - 'A' + 10;
+        default:
+            return -1;
+    }
+}
+
 static bool is_identifier_start(char c) {
     // TODO: unicode?
     return is_nondigit(c);
@@ -128,6 +146,42 @@ uint32_t offset_by(uint32_t index, Vec(T2Offset) offsets) {
         highest_offset = offset;
     }
     return index - highest_offset.index + highest_offset.actual;
+}
+
+static string parse_escape(string p) {
+     char c = p.raw[0];
+     next(p);
+     switch (c) {
+         case '\'':
+         case '"':
+         case '?':
+         case '\\':
+         case 'a':
+         case 'b':
+         case 'f':
+         case 'n':
+         case 'r':
+         case 't':
+         case 'v':
+             break;
+         case '0' ... '7':
+             for (int i = 0; i < 2; i++) {
+                 c = p.raw[0];
+                 if (!('0' <= c && c <= '7')) break;
+                 next(p);
+             }
+             break;
+        case 'x':
+             while (true) {
+                 c = p.raw[0];
+                 if (hex_digit(c) == (uint8_t) -1) break;
+                 next(p);
+             }
+             break;
+        default:
+             bail("unknown string escape `%c`", c);
+     }
+     return p;
 }
 
 typedef enum: uint8_t {
@@ -258,7 +312,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                         case '\n':
                             bail("newline in character constant");
                         case '\\':
-                            bail("todo: string escapes");
+                            p = parse_escape(p);
                         default:
                             continue;
                         case '\'':
@@ -279,7 +333,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                         case '\n':
                             bail("newline in string literal");
                         case '\\':
-                            bail("todo: string escapes");
+                            p = parse_escape(p);
                         default:
                             continue;
                         case '"':
