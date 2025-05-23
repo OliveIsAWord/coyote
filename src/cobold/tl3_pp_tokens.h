@@ -18,11 +18,13 @@ typedef enum: uint8_t {
 
 typedef struct {
     uint32_t loc;
+    uint32_t actual_loc;
     uint16_t len;
+    uint16_t actual_len;
     PpTokKind kind;
 } PpTok;
 
 Vec_typedef(PpTok);
 
 Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets);
-void debug_pptoks(Vec(PpTok) toks, string src1);
+void debug_pptoks(Vec(PpTok) toks, string src1, string src2);

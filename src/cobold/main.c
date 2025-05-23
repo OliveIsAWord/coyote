@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
     if (src1.len != 0 && (src2.len == 0 || src2.raw[src2.len - 1] != '\n')) {
         bail("non-empty source file does not end in a new line character");
     }
-    if (true)
+    if (false)
     {
         for (size_t i = 0; i < offsets.len; i++) {
             T2Offset o = offsets.at[i];
@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
     // printf("source:\n```\n" str_fmt "```\n", str_arg(src2));
 
     Vec(PpTok) src3 = tl3(src2, offsets);
-    debug_pptoks(src3, src1);
+    debug_pptoks(src3, src1, src2);
 
     bail("TODO: compile C code :3");
     return 0;
