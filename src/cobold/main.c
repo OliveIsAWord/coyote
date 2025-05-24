@@ -1,5 +1,6 @@
 #include "cobold.h"
 #include "tl3_pp_tokens.h"
+#include "tl4_preprocessing.h"
 
 string file_read_to_string(string filepath) {
     // must be null terminated, ugh
@@ -70,7 +71,9 @@ int main(int argc, char *argv[]) {
     // printf("source:\n```\n" str_fmt "```\n", str_arg(src2));
 
     Vec(PpTok) src3 = tl3(src2, offsets);
-    debug_pptoks(src3, src1, src2);
+    debug_pptoks(src3, src1);
+
+    //Vec(PpTok) src4 = tl4(src3);
 
     bail("TODO: compile C code :3");
     return 0;

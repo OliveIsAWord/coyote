@@ -2,7 +2,7 @@
 
 #define next(str) (assert(str.len > 0), str.len--, str.raw++, (void) 0)
 
-void debug_pptoks(Vec(PpTok) toks, string src1, string src2) {
+void debug_pptoks(Vec(PpTok) toks, string src1) {
     bool print_whitespace = false;
     bool got_newline = true;
     for (size_t i = 0; i < toks.len; i++) {
@@ -37,16 +37,9 @@ void debug_pptoks(Vec(PpTok) toks, string src1, string src2) {
         }
         got_newline = tok.kind == PpTokNewline;
         //eprintf(" %d, %d", tok.loc, tok.len);
-        if (src2.len != 0) {
-            eprintf(" ");
-            string slice = {
-                .raw = src2.raw + tok.loc,
-                .len = tok.len
-            };
-            //eprintf("%d", tok.len);
-            debug_str(slice);
-        }
-        if (src1.len != 0 && tok.len != tok.actual_len) {
+        eprintf(" ");
+        debug_str(tok.value);
+        if (src1.len != 0 && tok.value.len != tok.actual_len) {
             eprintf(" : ");
             string slice = {
                 .raw = src1.raw + tok.actual_loc,
@@ -405,7 +398,7 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                     break;
                 }
             }
-            debug_pptoks(src3, (string){0}, src2);
+            debug_pptoks(src3, (string){0});
             eprintf("unknown preproc tokenization error at ");
             debug_str(p);
             if (kind != (PpTokKind) -1) {
@@ -418,6 +411,8 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
         hs = hs_new;
         uint32_t tok_end = p.raw - src2.raw;
         uint16_t len = tok_end - tok_start;
+        string value_borrow = { .raw = src2.raw + tok_start, .len = len };
+        string value = string_clone(value_borrow);
 
         uint32_t actual_start = offset_by(tok_start, offsets);
         uint32_t actual_end = offset_by(tok_end, offsets);
@@ -426,9 +421,8 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
         //eprintf("= %d, %d, %d; %d, %d, %d\n", c, tok_start, tok_end, real_start, real_end, len);
         PpTok tok = {
             .kind = kind,
-            .loc = tok_start,
+            .value = value,
             .actual_loc = actual_start,
-            .len = len,
             .actual_len = actual_len
         };
         vec_append(&src3, tok);
