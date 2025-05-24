@@ -1,2 +1,2 @@
-#include <positively meowing>
-main(){"awa";return 123.0+'abc';}
+#define TWO (1 + 1)
+int main(){return TWO + TWO;}

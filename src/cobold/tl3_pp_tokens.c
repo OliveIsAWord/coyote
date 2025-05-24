@@ -1,4 +1,4 @@
-#include "tl3_pp_tokens.h"
+#include "cobold.h"
 
 #define next(str) (assert(str.len > 0), str.len--, str.raw++, (void) 0)
 
@@ -107,7 +107,7 @@ static bool is_identifier_continue(char c) {
     return is_identifier_start(c) || is_digit(c);
 }
 
-static bool starts_with_cstr(string str, const char *prefix) {
+bool starts_with_cstr(string str, const char *prefix) {
     for (size_t i = 0; prefix[i]; i++) {
         if (str.len == 0 || str.raw[i] != prefix[i]) {
             return false;
@@ -116,7 +116,7 @@ static bool starts_with_cstr(string str, const char *prefix) {
     return true;
 }
 
-static bool string_eq_cstr(string str, const char *match) {
+bool string_eq_cstr(string str, const char *match) {
     return starts_with_cstr(str, match) && str.len == strlen(match);
 }
 
