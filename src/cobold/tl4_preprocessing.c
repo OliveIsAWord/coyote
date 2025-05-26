@@ -1,9 +1,11 @@
 #include "cobold.h"
 #include "tl4_preprocessing.h"
+#include "map.h"
 
 typedef struct {
     Vec(PpTok) src4;
     const Vec(PpTok) src3;
+    Map defines;
     size_t i;
 } Tl4;
 
@@ -26,6 +28,12 @@ static void push(Tl4 *self, PpTok tok) {
     vec_append(&self->src4, tok);
 }
 
+static void extend(Vec(PpTok) *dest, Vec(PpTok) toks) {
+    for (size_t i = 0; i < toks.len; i++) {
+        vec_append(dest, toks.at[i]);
+    }
+}
+
 static Save save(Tl4 *self) {
     return (Save){ .i = self->i };
 }
@@ -42,34 +50,37 @@ static void skip_whitespace(Tl4 *self) {
 
 static void expand_ident(Tl4 *self, PpTok ident) {
     assert(ident.kind == PpTokIdentifier);
-    // TODO: actual macro replacement
-    push(self, ident);
 }
 
-static void next_text_line(Tl4 *self) {
-    while (true) {
-        PpTok tok = next(self);
+static Vec(PpTok) macro_replace(Tl4 *self, TokSlice toks) {
+    Vec(PpTok) expanded = vec_new(PpTok, 8);
+    for (size_t i = 0; i < toks.len; i++) {
+        PpTok tok = toks.at[i];
+        Macro m;
         switch (tok.kind) {
             case PpTokHeaderName:
                 bail("unreachable");
+            case PpTokIdentifier:
+                m = map_get(&self->defines, tok.value);
+                if (m.toks.at) break;
+                [[fallthrough]];
             case PpTokWhitespace:
             case PpTokPpNumber:
             case PpTokCharacterConstant:
             case PpTokStringLiteral:
             case PpTokPunctuator:
-                push(self, tok);
-                break;
             case PpTokNewline:
-                push(self, tok);
-                return;
-            case PpTokIdentifier:
-                expand_ident(self, tok);
+                vec_append(&expanded, tok);
+                continue;
         }
+        Vec(PpTok) expanded_macro = macro_replace(self, m.toks);
+        extend(&expanded, expanded_macro);
     }
+    return expanded;
 }
 
 static void next_group(Tl4 *self) {
-    Save saved = save(self);
+    size_t text_line_start = self->i;
     PpTok tok = next(self);
     switch (tok.kind) {
         case PpTokHeaderName:
@@ -85,8 +96,16 @@ static void next_group(Tl4 *self) {
         case PpTokStringLiteral:
         case PpTokIdentifier:
         case PpTokNewline:
-            load(self, saved);
-            next_text_line(self);
+            while (tok.kind != PpTokNewline) {
+                tok = next(self);
+            }
+            TokSlice slice = {
+                .at = self->src3.at + text_line_start,
+                .len = self->i - text_line_start
+            };
+            Vec(PpTok) toks = macro_replace(self, slice);
+            extend(&self->src4, toks);
+            return;
     }
     // handle # directives
     skip_whitespace(self);
@@ -149,14 +168,52 @@ static void next_group(Tl4 *self) {
             bail("expected macro name");
         }
         string name = tok.value;
-        bail("TODO: #define " str_fmt, str_arg(name));
+        // lparen following macro name without space
+        if (peek(self).kind == PpTokPunctuator && string_eq_cstr(peek(self).value, "(")) {
+            bail("TODO: function-like macros");
+        }
+        skip_whitespace(self);
+        size_t i_start = self->i;
+        size_t i_end = i_start;
+        while (true) {
+            PpTokKind tok = next(self).kind;
+            if (tok == PpTokNewline) break;
+            if (tok != PpTokWhitespace) i_end = self->i;
+        }
+        Macro value = { .toks = {
+            .at = &self->src3.at[i_start],
+            .len = i_end - i_start,
+        } };
+        map_insert(&self->defines, name, value);
+        debug_map(&self->defines);
+        return;
+    }
+    if (string_eq_cstr(tok.value, "undef")) {
+        skip_whitespace(self);
+        tok = next(self);
+        if (tok.kind != PpTokIdentifier) {
+            bail("expected macro name");
+        }
+        string name = tok.value;
+        skip_whitespace(self);
+        if (next(self).kind != PpTokNewline) {
+            bail("expected end of #undef");
+        }
+        map_remove(&self->defines, name);
+        debug_map(&self->defines);
+        return;
     }
     bail("unknown directive `" str_fmt "`", str_arg(tok.value));
 }
 
 Vec(PpTok) tl4(Vec(PpTok) src3) {
     Vec(PpTok) src4 = vec_new(PpTok, 8);
-    Tl4 p = { .src3 = src3, .src4 = src4, .i = 0 };
+    Tl4 p = {
+        .src3 = src3,
+        .src4 = src4,
+        .defines = map_with_capacity(16),
+        .i = 0
+    };
     while (p.i < src3.len) {
         next_group(&p);
     }

@@ -3,8 +3,12 @@
 #include "cobold.h"
 
 typedef struct {
-    uint32_t start;
-    uint16_t len;
+    PpTok *at;
+    size_t len;
+} TokSlice;
+
+typedef struct {
+    TokSlice toks;
 } Macro;
 
 typedef struct {
@@ -16,8 +20,9 @@ typedef struct {
 Vec_typedef(Entry);
 
 typedef struct {
-    // we use Vec a little queerly here: `len` is the number of elements in the
-    // map. We access indices [0, cap) which are all initialized.
+    // We use Vec a little queerly here: `len` is the
+    // number of elements in the map, including tombstones.
+    // We access indices [0, cap) which all have initialized `hash` fields.
     Vec(Entry) entries;
 } Map;
 
@@ -26,3 +31,4 @@ Map map_with_capacity(size_t cap);
 Macro map_get(const Map *map, string key);
 void map_insert(Map *map, string key, Macro value);
 void map_remove(Map *map, string key);
+void debug_map(const Map *map);

@@ -74,6 +74,18 @@ int main(int argc, char *argv[]) {
 
     Vec(PpTok) src4 = tl4(src3);
 
+    eprintf("input:\n" str_fmt "\noutput:\n", str_arg(src1));
+    for (size_t i = 0; i < src4.len; i++) {
+        PpTok tok = src4.at[i];
+        // if (tok.kind == PpTokWhitespace || tok.kind == PpTokNewline) continue;
+        // if (tok.kind == PpTokStringLiteral) {
+        //     debug_str(tok.value);
+        // } else {
+            eprintf(str_fmt, str_arg(tok.value));
+        // }
+        // eprintf(" ");
+    }
+    eprintf("\n");
     bail("TODO: compile C code :3");
     return 0;
 }
