@@ -2,6 +2,7 @@
 #include "tl4_preprocessing.h"
 #include "map.h"
 
+
 typedef struct {
     Vec(PpTok) src4;
     const Vec(PpTok) src3;
@@ -171,6 +172,9 @@ static void next_group(Tl4 *self) {
         // lparen following macro name without space
         if (peek(self).kind == PpTokPunctuator && string_eq_cstr(peek(self).value, "(")) {
             bail("TODO: function-like macros");
+        }
+        if (next(self).kind != PpTokWhitespace) {
+            bail("there must be whitespace after the name of an object-like macro");
         }
         skip_whitespace(self);
         size_t i_start = self->i;
