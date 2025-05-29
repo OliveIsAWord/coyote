@@ -337,6 +337,29 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 hs_new = HsStart;
                 break;
             }
+            // punctuator
+            {
+                const char *matched_punct = NULL;
+                for (size_t i = 0; i < sizeof(puncts) / sizeof(puncts[0]); i++) {
+                    const char *punct = puncts[i];
+                    if (starts_with_cstr(p, punct)) {
+                        matched_punct = punct;
+                        break;
+                    }
+                }
+                if (matched_punct) {
+                    if (strcmp(matched_punct, ".") == 0 && is_digit(p.raw[1])) {
+                        // oops, this is a number
+                    } else {
+                        size_t len = strlen(matched_punct);
+                        p.raw += len;
+                        p.len -= len;
+                        kind = PpTokPunctuator;
+                        hs_new = strcmp(matched_punct, "#") == 0 ? HsHash : HsStart;
+                        break;
+                    }
+                }
+            }
             // number
             if (c == '.' || is_digit(c)) {
                 while (true) {
@@ -378,25 +401,6 @@ Vec(PpTok) tl3(string src2, Vec(T2Offset) offsets) {
                 kind = PpTokIdentifier;
                 hs_new = hs == HsHash && string_eq_cstr(ident, "include") ? HsInclude : HsStart;
                 break;
-            }
-            // punctuator
-            {
-                const char *matched_punct = NULL;
-                for (size_t i = 0; i < sizeof(puncts) / sizeof(puncts[0]); i++) {
-                    const char *punct = puncts[i];
-                    if (starts_with_cstr(p, punct)) {
-                        matched_punct = punct;
-                        break;
-                    }
-                }
-                if (matched_punct) {
-                    size_t len = strlen(matched_punct);
-                    p.raw += len;
-                    p.len -= len;
-                    kind = PpTokPunctuator;
-                    hs_new = strcmp(matched_punct, "#") == 0 ? HsHash : HsStart;
-                    break;
-                }
             }
             debug_pptoks(src3, (string){0});
             eprintf("unknown preproc tokenization error at ");
