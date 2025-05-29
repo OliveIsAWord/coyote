@@ -3,12 +3,7 @@
 #include "cobold.h"
 
 typedef struct {
-    PpTok *at;
-    size_t len;
-} TokSlice;
-
-typedef struct {
-    TokSlice toks;
+    Vec(PpTok) toks;
 } Macro;
 
 typedef struct {

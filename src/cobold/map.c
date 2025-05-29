@@ -120,7 +120,7 @@ void debug_map(const Map *map) {
         if (e.hash & OCCUPIED_BIT) {
             debug_str(e.key);
             eprintf(" ->");
-            TokSlice toks = e.value.toks;
+            Vec(PpTok) toks = e.value.toks;
             for (size_t i = 0; i < toks.len; i++) {
                 PpTok t = toks.at[i];
                 if (t.kind == PpTokWhitespace) continue;

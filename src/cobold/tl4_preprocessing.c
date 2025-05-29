@@ -5,42 +5,41 @@
 
 typedef struct {
     Vec(PpTok) src4;
-    const Vec(PpTok) src3;
+    // the tokens from `src3` in reverse order, such that successively popping
+    // tokens yields the correct order. Directives that cause macro rescanning
+    // push their intermediate output tokens here.
+    Vec(PpTok) input_stack;
     Map defines;
-    size_t i;
 } Tl4;
 
-typedef struct {
-    size_t i;
-} Save;
-
-static PpTok peek(Tl4 *self) {
-    assert(self->i < self->src3.len);
-    return self->src3.at[self->i];
+static PpTok peek(const Tl4 *self) {
+    Vec(PpTok) *stack = &self->input_stack;
+    assert(stack->len);
+    return stack->at[stack->len - 1];
 }
 
 static PpTok next(Tl4 *self) {
-    PpTok tok = peek(self);
-    self->i++;
-    return tok;
+    Vec(PpTok) *stack = &self->input_stack;
+    assert(stack->len);
+    return vec_pop(stack);
 }
 
 static void push(Tl4 *self, PpTok tok) {
     vec_append(&self->src4, tok);
 }
 
+/*
 static void extend(Vec(PpTok) *dest, Vec(PpTok) toks) {
     for (size_t i = 0; i < toks.len; i++) {
         vec_append(dest, toks.at[i]);
     }
 }
+*/
 
-static Save save(Tl4 *self) {
-    return (Save){ .i = self->i };
-}
-
-static void load(Tl4 *self, Save saved) {
-    self->i = saved.i;
+static void push_to_input_stack(Tl4 *self, Vec(PpTok) from) {
+    for (size_t i = 0; i < from.len; i++) {
+        vec_append(&self->input_stack, from.at[from.len - 1 - i]);
+    }
 }
 
 static void skip_whitespace(Tl4 *self) {
@@ -49,6 +48,7 @@ static void skip_whitespace(Tl4 *self) {
     }
 }
 
+/*
 static void expand_ident(Tl4 *self, PpTok ident) {
     assert(ident.kind == PpTokIdentifier);
 }
@@ -79,9 +79,32 @@ static Vec(PpTok) macro_replace(Tl4 *self, TokSlice toks) {
     }
     return expanded;
 }
+*/
+
+static void macro_replace(Tl4 *self, PpTok tok) {
+    Macro m;
+    switch (tok.kind) {
+        case PpTokHeaderName:
+        case PpTokNewline:
+            bail("unreachable");
+        case PpTokIdentifier:
+            m = map_get(&self->defines, tok.value);
+            if (m.toks.at) break;
+            [[fallthrough]];
+        case PpTokWhitespace:
+        case PpTokPunctuator:
+        case PpTokPpNumber:
+        case PpTokCharacterConstant:
+        case PpTokStringLiteral:
+            push(self, tok);
+            return;
+    }
+    // our `tok` is now an identifier, and `m` is its corresponding macro value
+    // TODO: function-like macros
+    push_to_input_stack(self, m.toks);
+}
 
 static void next_group(Tl4 *self) {
-    size_t text_line_start = self->i;
     PpTok tok = next(self);
     switch (tok.kind) {
         case PpTokHeaderName:
@@ -97,15 +120,13 @@ static void next_group(Tl4 *self) {
         case PpTokStringLiteral:
         case PpTokIdentifier:
         case PpTokNewline:
-            while (tok.kind != PpTokNewline) {
-                tok = next(self);
+            size_t old_len = self->input_stack.len;
+            for (; tok.kind != PpTokNewline; tok = next(self)) {
+                macro_replace(self, tok);
             }
-            TokSlice slice = {
-                .at = self->src3.at + text_line_start,
-                .len = self->i - text_line_start
-            };
-            Vec(PpTok) toks = macro_replace(self, slice);
-            extend(&self->src4, toks);
+            assert(self->input_stack.len <= old_len);
+            assert(tok.kind == PpTokNewline);
+            push(self, tok);
             return;
     }
     // handle # directives
@@ -177,17 +198,16 @@ static void next_group(Tl4 *self) {
             bail("there must be whitespace after the name of an object-like macro");
         }
         skip_whitespace(self);
-        size_t i_start = self->i;
-        size_t i_end = i_start;
+        Vec(PpTok) replacement_list = vec_new(PpTok, 8);
         while (true) {
-            PpTokKind tok = next(self).kind;
-            if (tok == PpTokNewline) break;
-            if (tok != PpTokWhitespace) i_end = self->i;
+            PpTok tok = next(self);
+            if (tok.kind == PpTokNewline) break;
+            vec_append(&replacement_list, tok);
         }
-        Macro value = { .toks = {
-            .at = &self->src3.at[i_start],
-            .len = i_end - i_start,
-        } };
+        while (replacement_list.at[replacement_list.len - 1].kind == PpTokWhitespace) {
+            vec_pop(&replacement_list);
+        }
+        Macro value = { .toks = replacement_list };
         map_insert(&self->defines, name, value);
         debug_map(&self->defines);
         return;
@@ -212,13 +232,14 @@ static void next_group(Tl4 *self) {
 
 Vec(PpTok) tl4(Vec(PpTok) src3) {
     Vec(PpTok) src4 = vec_new(PpTok, 8);
+    Vec(PpTok) input_stack = vec_new(PpTok, src3.len);
     Tl4 p = {
-        .src3 = src3,
         .src4 = src4,
-        .defines = map_with_capacity(16),
-        .i = 0
+        .input_stack = input_stack,
+        .defines = map_with_capacity(16)
     };
-    while (p.i < src3.len) {
+    push_to_input_stack(&p, src3);
+    while (p.input_stack.len) {
         next_group(&p);
     }
     return p.src4;

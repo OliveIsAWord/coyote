@@ -1,3 +1,5 @@
-#define f() KABLAM
-#define g f
-g()
+#define TWO (1  \
++ ONE)
+int main(){return 2 + TWO +
+#define ONE 1.0
+           TWO ;}
